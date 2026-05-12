@@ -5,7 +5,11 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
@@ -14,6 +18,7 @@ import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.SeekBar;
 import android.widget.Spinner;
+import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 // this is my main activity class for the velocimeter app
@@ -39,6 +44,26 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     SeekBar seekBar;
     CheckBox checkboxManual;
     boolean manualMode = false;
+
+    // alarm stuff
+    ToneGenerator toneGen;
+    boolean alarmSounding = false;
+    Handler alarmHandler = new Handler(Looper.getMainLooper());
+
+    // this makes the beep sound repeatedly
+    Runnable alarmBeep = new Runnable() {
+        @Override
+        public void run() {
+            // check if alarm should still be on
+            if (alarmSounding == true) {
+                if (toneGen != null) {
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 60);
+                }
+                // wait 100ms then beep again
+                alarmHandler.postDelayed(alarmBeep, 100);
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -115,6 +140,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     seekBar.setAlpha(1f);
                     seekBar.setProgress(300); // middle position = 0 speed
                     gaugeView.setSpeed(0f);
+                    setAlarm(false);
                     Log.d("Velocimeter", "Manual mode ON");
                 } else {
                     // disable the seekbar
@@ -126,6 +152,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     lastTimestamp = 0;
                     stopSign = 0f;
                     graceFrames = 0;
+                    setAlarm(false);
                     Log.d("Velocimeter", "Manual mode OFF");
                 }
             }
@@ -140,6 +167,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     // 300 is the middle so we subtract 300 then divide by 100
                     float speed = (progress - 300) / 100f;
                     gaugeView.setSpeed(speed);
+                    updateAlarm(speed);
                 }
             }
 
@@ -158,6 +186,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onResume() {
         super.onResume();
+
+        // create tone generator for the alarm
+        toneGen = new ToneGenerator(AudioManager.STREAM_ALARM, 85);
 
         // register sensor listeners
         if (linearAccelSensor != null) {
@@ -180,6 +211,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         // unregister sensors when app goes to background
         sensorManager.unregisterListener(this);
+
+        // turn off alarm
+        setAlarm(false);
+
+        // release tone generator to free memory
+        if (toneGen != null) {
+            toneGen.release();
+            toneGen = null;
+        }
     }
 
     // this is called every time sensor data changes
@@ -270,11 +310,39 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // update the gauge if not in manual mode
         if (manualMode == false) {
             gaugeView.setSpeed(velocity);
+            updateAlarm(velocity);
         }
     }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
         // dont need this but have to implement it
+    }
+
+    // check if speed is fast enough to trigger alarm
+    private void updateAlarm(float speed) {
+        float absSpeed = speed;
+        if (absSpeed < 0) {
+            absSpeed = absSpeed * -1; // make it positive
+        }
+
+        if (absSpeed >= 2f) { // 2.0 is where red zone starts
+            setAlarm(true);
+        } else {
+            setAlarm(false);
+        }
+    }
+
+    // turn alarm on or off
+    private void setAlarm(boolean on) {
+        if (on == alarmSounding) {
+            return; // already in the right state
+        }
+        alarmSounding = on;
+        if (on == true) {
+            alarmHandler.post(alarmBeep);
+        } else {
+            alarmHandler.removeCallbacks(alarmBeep);
+        }
     }
 }
