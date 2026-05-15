@@ -13,4 +13,4 @@
 
 -Kritik değerlerde görsel veya sesli alarm/uyarı
 
-# Demo Linki:
+# Demo Linki: https://youtu.be/QRNnvKlNfAM?si=R8-Bi5mgHgegz_nO
